@@ -143,6 +143,55 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
    *   (look at equation 3.33) http://planning.cs.uiuc.edu/node99.html
    */
 
+  double sig_x = std_landmark[0];
+  double sig_y = std_landmark[1];
+
+  for (int i=0;i<num_particles;i++) {
+    double x = particles[i].x;
+    double y = particles[i].y;
+    double theta = particles[i].theta;
+
+    vector<LandmarkObs> predictions;
+    for (size_t j=0;j<map_landmarks.landmark_list.size();j++) {
+      double lm_x = map_landmarks.landmark_list[j].x_f;
+      double lm_y = map_landmarks.landmark_list[j].y_f;
+
+      double cur_dist = dist(x, y, lm_x, lm_y);
+      if (cur_dist <= sensor_range) {
+        predictions.push_back(LandmarkObs{map_landmarks.landmark_list[j].id_i, lm_x, lm_y});
+      }
+    }
+
+    vector<LandmarkObs> tr_observations;
+    for (size_t j=0;j<observations.size();j++) {
+      double obs_x = observations[j].x;
+      double obs_y = observations[j].y;
+
+      double tr_x = x + (cos(theta) * obs_x) - (sin(theta) * obs_y);
+      double tr_y = y + (sin(theta) * obs_x) + (cos(theta) * obs_y);
+    
+      tr_observations.push_back(LandmarkObs{observations[j].id, tr_x, tr_y});
+    }
+
+    dataAssociation(predictions, tr_observations);
+
+    particles[i].weight = 1.0;
+
+    for (size_t j=0;j<tr_observations.size();j++) {
+      double tr_x = tr_observations[j].x;
+      double tr_y = tr_observations[j].y;
+
+      for (size_t k=0;k<predictions.size();k++) {
+        if (tr_observations[j].id == predictions[k].id) {
+          double pr_x = predictions[k].x;
+          double pr_y = predictions[k].y;
+          particles[i].weight *= multiv_prob(sig_x, sig_y, tr_x, tr_y, pr_x, pr_y);
+          weights[i] = particles[i].weight;
+          break;
+        }
+      }
+    }
+  }
 }
 
 void ParticleFilter::resample() {
